@@ -90,6 +90,15 @@ public class ClientHandler {
             while (true) {
                 String message = in.readUTF();
                 System.out.println("Receive message: " + message);
+
+                if (message.startsWith("/w")) {
+                    String[] split = message.split("\\s");
+                    String receiver = split[1];
+                    String msg = split[2];
+                    server.broadcastPrivate(nick, receiver, msg);
+                    continue;
+                }
+
                 if ("/end".equals(message)) {
                     break;
                 }
@@ -102,6 +111,9 @@ public class ClientHandler {
     }
 
     private void closeConnection() {
+        server.unsubscribe(this);
+        server.broadcast(nick + " has leaved chat");
+
         sendMessage("/end");
         try {
             in.close();
