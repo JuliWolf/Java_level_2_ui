@@ -95,7 +95,7 @@ public class ClientHandler {
                     String[] split = message.split("\\s");
                     String receiver = split[1];
                     String msg = split[2];
-                    server.broadcastPrivate(nick, receiver, msg);
+                    server.sendPrivateMessage(nick, receiver, msg);
                     continue;
                 }
 
