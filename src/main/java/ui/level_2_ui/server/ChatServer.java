@@ -5,6 +5,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class ChatServer {
     private final int PORT = 8189;
@@ -37,6 +38,18 @@ public class ChatServer {
 
     public synchronized void broadcast (String message) {
         clients.values().forEach(client -> client.sendMessage(message));
+    }
+
+    public void broadcastPrivate(String from, String to, String message) {
+        ClientHandler sender = clients.get(from);
+        ClientHandler receiver = clients.get(to);
+
+        if (receiver == null) {
+            sender.sendMessage("SERVER: user with nick " + to + " is not active");
+            return;
+        }
+
+        receiver.sendMessage(message);
     }
 
     public synchronized void unsubscribe (ClientHandler client) {
