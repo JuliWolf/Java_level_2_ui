@@ -39,6 +39,18 @@ public class ChatServer {
         clients.values().forEach(client -> client.sendMessage(message));
     }
 
+    public void sendPrivateMessage(String from, String to, String message) {
+        ClientHandler sender = clients.get(from);
+        ClientHandler receiver = clients.get(to);
+
+        if (receiver == null) {
+            sender.sendMessage("SERVER: user with nick " + to + " is not active");
+            return;
+        }
+
+        receiver.sendMessage(message);
+    }
+
     public synchronized void unsubscribe (ClientHandler client) {
         clients.remove(client.getNick());
     }
