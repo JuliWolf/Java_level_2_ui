@@ -1,5 +1,6 @@
 package ui.level_2_ui.client;
 
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -72,6 +73,7 @@ public class ClientController {
         loginBox.setVisible(!success);
         messageBox.setVisible(success);
         textArea.setVisible(success);
+        Platform.exit();
     }
 
     private void showNotification() {

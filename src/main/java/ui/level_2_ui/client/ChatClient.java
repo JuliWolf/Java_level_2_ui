@@ -12,6 +12,8 @@ public class ChatClient {
 
     private ClientController controller;
 
+    private boolean isAuthExpired = false;
+
     public ChatClient (ClientController controller) {
         this.controller = controller;
     }
@@ -45,6 +47,8 @@ public class ChatClient {
 
     private void readMessage() throws IOException {
         while (true) {
+            if (isAuthExpired) break;
+
             String message = in.readUTF();
             System.out.println("Receive message: " + message);
 
@@ -64,6 +68,13 @@ public class ChatClient {
                 final String nick = split[1];
                 controller.addMessage("Успешная авторизация под ником " + nick);
                 controller.setAuth(true);
+                break;
+            }
+
+            if ("/authTimeout".equals(message)) {
+                isAuthExpired = true;
+                controller.setAuth(false);
+                sendMessage("/authTimeout");
                 break;
             }
         }

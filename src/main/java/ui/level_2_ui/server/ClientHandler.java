@@ -15,6 +15,9 @@ public class ClientHandler {
     AuthService authService;
 
     private String nick;
+    private final int AUTH_TIMEOUT = 120;
+    private Boolean isAuthExpired = false;
+    private Boolean isAuthenticated = false;
 
     public String getNick () {
         return nick;
@@ -28,6 +31,18 @@ public class ClientHandler {
             this.in = new DataInputStream(socket.getInputStream());
             this.out = new DataOutputStream(socket.getOutputStream());
             this.authService = authService;
+
+            new Thread(() -> {
+                try {
+                    Thread.sleep(AUTH_TIMEOUT * 1000);
+
+                    if (!isAuthenticated) {
+                        sendMessage("/authTimeout");
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }).start();
 
             new Thread(() -> {
                 try {
@@ -62,13 +77,19 @@ public class ClientHandler {
 
                         sendMessage("/authok " + nick);
                         this.nick = nick;
+                        this.isAuthenticated = true;
                         server.broadcast("Пользователь " + nick + " зашел в чат");
                         server.subscribe(this);
                         break;
 
-                    }else {
+                    } else {
                         sendMessage("Неверные логин/пароль");
                     }
+                }
+
+                if ("/authTimeout".equals(str)) {
+                    isAuthExpired = true;
+                    break;
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -88,6 +109,8 @@ public class ClientHandler {
     private void readMessage() throws IOException {
         try {
             while (true) {
+                if (isAuthExpired) break;
+
                 String message = in.readUTF();
                 System.out.println("Receive message: " + message);
 
