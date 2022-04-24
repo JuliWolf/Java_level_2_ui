@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AuthServiceImpl implements AuthService {
+    private final DataBaseConnect dbConnection;
+
     private class Entry {
         private final String login;
         private final String pass;
@@ -19,7 +21,8 @@ public class AuthServiceImpl implements AuthService {
 
     private List<Entry> entries;
 
-    public AuthServiceImpl() {
+    public AuthServiceImpl(DataBaseConnect connect) {
+        this.dbConnection = connect;
         entries = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
             entries.add(new Entry("login"+i, "pass"+i, "nick"+i));
@@ -33,13 +36,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String getNickByLoginPass(String login, String pass) {
-        for (Entry client: entries) {
-            if (client.login.equals(login) && client.pass.equals(pass)) {
-                return client.nick;
-            }
-        }
-
-        return null;
+        return dbConnection.getNickByLoginPass(login, pass);
     }
 
     @Override
