@@ -75,8 +75,8 @@ public class ClientHandler {
                             continue;
                         }
 
-                        sendMessage("/authok " + nick);
                         this.nick = nick;
+                        sendMessage("/authok " + nick);
                         this.isAuthenticated = true;
                         server.broadcast("Пользователь " + nick + " зашел в чат");
                         server.subscribe(this);
@@ -119,6 +119,13 @@ public class ClientHandler {
                     String receiver = split[1];
                     String msg = split[2];
                     server.sendPrivateMessage(nick, receiver, msg);
+                    continue;
+                }
+
+                if (message.startsWith("/change")) {
+                    String[] split = message.split("\\s");
+                    String newNick = split[1];
+                    server.changeNick(nick, newNick);
                     continue;
                 }
 

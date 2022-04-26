@@ -73,7 +73,10 @@ public class ClientController {
         loginBox.setVisible(!success);
         messageBox.setVisible(success);
         textArea.setVisible(success);
-        Platform.exit();
+
+        if (!success) {
+            Platform.exit();
+        }
     }
 
     private void showNotification() {

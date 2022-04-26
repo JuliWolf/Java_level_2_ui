@@ -10,15 +10,17 @@ public class ChatServer {
     private final int PORT = 8189;
 
     private final Map<String, ClientHandler> clients;
+    private final DataBaseConnect dbConnection;
 
     public ChatServer() {
+        this.dbConnection = new DataBaseConnect();
         this.clients = new HashMap<>();
     }
 
     public void run () {
         try (
             ServerSocket server = new ServerSocket(PORT);
-            AuthService authService = new AuthServiceImpl()
+            AuthService authService = new AuthServiceImpl(dbConnection)
         ) {
             while (true) {
                 System.out.println("Wait client connection...");
@@ -57,5 +59,10 @@ public class ChatServer {
 
     public synchronized void subscribe (ClientHandler client) {
         clients.put(client.getNick(), client);
+    }
+
+    public void changeNick(String nick, String newNick) {
+        dbConnection.changeNick(nick, newNick);
+        broadcast("User with nick: " + nick + " changed his nickname. New nick is " + newNick);
     }
 }
