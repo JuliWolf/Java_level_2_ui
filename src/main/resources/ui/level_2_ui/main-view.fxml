@@ -8,6 +8,7 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ListView?>
 <VBox alignment="CENTER" spacing="20.0" xmlns:fx="http://javafx.com/fxml"
       fx:controller="ui.level_2_ui.client.ClientController">
     <padding>
@@ -20,14 +21,15 @@
         <Button text="Login" onAction="#onAuthClick" defaultButton="true" />
     </HBox>
 
-    <TextArea fx:id="textArea" VBox.vgrow="ALWAYS" visible="false"/>
+    <HBox fx:id="messageBox" VBox.vgrow="ALWAYS" visible="false" >
+        <VBox spacing="5">
+            <TextArea fx:id="messagesArea" VBox.vgrow="ALWAYS" editable="false"/>
+            <HBox>
+                <TextField fx:id="messageField" HBox.hgrow="ALWAYS"/>
+                <Button text="Send" defaultButton="true" onAction="#onSendClick"/>
+            </HBox>
+        </VBox>
 
-    <VBox fx:id="messageBox" VBox.vgrow="ALWAYS" visible="false" >
-        <TextArea  fx:id="messagesArea" VBox.vgrow="ALWAYS" editable="false" />
-
-        <HBox spacing="20">
-            <TextField fx:id="messageField" HBox.hgrow="ALWAYS" />
-            <Button text="Send" onAction="#onSendClick" defaultButton="true" />
-        </HBox>
-    </VBox>
+        <ListView fx:id="clientList" minWidth="200" maxWidth="200" onMouseClicked="#selectClient"/>
+    </HBox>
 </VBox>

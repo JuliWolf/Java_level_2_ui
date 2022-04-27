@@ -1,17 +1,16 @@
 package ui.level_2_ui.server;
 
+import ui.level_2_ui.message.*;
 import ui.level_2_ui.server.ChatServer;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
 
 public class ClientHandler {
     private Socket socket;
     private ChatServer server;
-    private DataInputStream in;
-    private DataOutputStream out;
+    private ObjectInputStream in;
+    private ObjectOutputStream out;
     AuthService authService;
 
     private String nick;
@@ -28,8 +27,8 @@ public class ClientHandler {
             this.nick = "";
             this.socket = socket;
             this.server = server;
-            this.in = new DataInputStream(socket.getInputStream());
-            this.out = new DataOutputStream(socket.getOutputStream());
+            this.in = new ObjectInputStream(socket.getInputStream());
+            this.out = new ObjectOutputStream(socket.getOutputStream());
             this.authService = authService;
 
             new Thread(() -> {
@@ -37,7 +36,7 @@ public class ClientHandler {
                     Thread.sleep(AUTH_TIMEOUT * 1000);
 
                     if (!isAuthenticated) {
-                        sendMessage("/authTimeout");
+                        sendMessage(AuthTimeoutMessage.of());
                     }
                 } catch (InterruptedException e) {
                     e.printStackTrace();
@@ -48,7 +47,7 @@ public class ClientHandler {
                 try {
                     authentication();
                     readMessage();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
                     closeConnection();
@@ -59,35 +58,32 @@ public class ClientHandler {
         }
     }
 
-    private void authentication() throws IOException {
+    private void authentication() throws Exception {
         while (true) {
             try {
-                String str = in.readUTF();
-                if (str.startsWith("/auth")) {
-                    String[] parts = str.split("\\s");
-                    String login = parts[1];
-                    String password = parts[2];
-                    String nick = authService.getNickByLoginPass(login, password);
-
+                final AbstractMessage message = (AbstractMessage) in.readObject();
+                if (message.getCommand() == Command.AUTH) {
+                    final AuthMessage authMessage = (AuthMessage) message;
+                    final String login = authMessage.getLogin();
+                    final String password = authMessage.getPassword();
+                    final String nick = authService.getNickByLoginPass(login, password);
                     if (nick != null) {
                         if (server.isNickBusy(nick)) {
-                            sendMessage("Пользователь уже авторизован");
+                            sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
                             continue;
                         }
-
+                        sendMessage(AuthOkMessage.of(nick));
                         this.nick = nick;
-                        sendMessage("/authok " + nick);
                         this.isAuthenticated = true;
-                        server.broadcast("Пользователь " + nick + " зашел в чат");
+                        server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
                         server.subscribe(this);
                         break;
-
                     } else {
-                        sendMessage("Неверные логин/пароль");
+                        sendMessage(ErrorMessage.of("Неверные логин и пароль"));
                     }
                 }
 
-                if ("/authTimeout".equals(str)) {
+                if (message.getCommand() == Command.AUTH_TIMEOUT) {
                     isAuthExpired = true;
                     break;
                 }
@@ -97,43 +93,44 @@ public class ClientHandler {
         }
     }
 
-    public void sendMessage(String message) {
+    public void sendMessage(AbstractMessage message) {
         try {
             System.out.println("SERVER: Send message to " + nick);
-            out.writeUTF(message);
+            out.writeObject(message);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void readMessage() throws IOException {
+    private void readMessage() throws Exception {
         try {
             while (true) {
                 if (isAuthExpired) break;
 
-                String message = in.readUTF();
+                final AbstractMessage message = (AbstractMessage) in.readObject();
                 System.out.println("Receive message: " + message);
 
-                if (message.startsWith("/w")) {
-                    String[] split = message.split("\\s");
-                    String receiver = split[1];
-                    String msg = split[2];
-                    server.sendPrivateMessage(nick, receiver, msg);
-                    continue;
-                }
-
-                if (message.startsWith("/change")) {
-                    String[] split = message.split("\\s");
-                    String newNick = split[1];
-                    server.changeNick(nick, newNick);
-                    continue;
-                }
-
-                if ("/end".equals(message)) {
+                if (message.getCommand() == Command.END) {
                     break;
                 }
 
-                server.broadcast(nick + ": " + message);
+                if (message.getCommand() == Command.MESSAGE) {
+                    final SimpleMessage simpleMessage = (SimpleMessage) message;
+                    server.broadcast(simpleMessage);
+                }
+
+                if (message.getCommand() == Command.PRIVATE_MESSAGE) {
+                    final PrivateMessage privateMessage = (PrivateMessage) message;
+                    server.sendPrivateMessage(this, privateMessage.getNickTo(), privateMessage.getMessage());
+                }
+
+                if (message.getCommand() == Command.CHANGE_NICK) {
+                    final ChangeNickMessage changeNickMessage = (ChangeNickMessage) message;
+                    String newNick = changeNickMessage.getNewNick();
+                    server.changeNick(nick, newNick);
+                    sendMessage(ChangeNickMessage.of(nick, newNick));
+                    nick = newNick;
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -141,22 +138,26 @@ public class ClientHandler {
     }
 
     private void closeConnection() {
-        server.unsubscribe(this);
-        server.broadcast(nick + " has leaved chat");
-
-        sendMessage("/end");
+        sendMessage(EndMessage.of());
         try {
-            in.close();
+            if (in != null) {
+                in.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
         try {
-            out.close();
+            if (out != null) {
+                out.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
         try {
-            socket.close();
+            if (socket != null) {
+                server.unsubscribe(this);
+                socket.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }

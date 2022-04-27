@@ -4,18 +4,29 @@ import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import ui.level_2_ui.message.AuthMessage;
+import ui.level_2_ui.message.ChangeNickMessage;
+import ui.level_2_ui.message.PrivateMessage;
+import ui.level_2_ui.message.SimpleMessage;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 
 public class ClientController {
 
     private final ChatClient client;
 
+    private String nickTo;
+
     @FXML
-    private TextArea textArea;
+    private ListView<String> clientList;
+
+    @FXML
+    private HBox messageBox;
 
     @FXML
     private HBox loginBox;
@@ -25,9 +36,6 @@ public class ClientController {
 
     @FXML
     private PasswordField passwordField;
-
-    @FXML
-    private VBox messageBox;
 
     @FXML
     private TextArea messagesArea;
@@ -48,20 +56,26 @@ public class ClientController {
     }
 
     public void onAuthClick(ActionEvent actionEvent) {
-        String login = loginField.getText();
-        String password = passwordField.getText();
-
-        client.sendMessage("/auth " + login + " " + password);
+        client.sendMessage(AuthMessage.of(loginField.getText(), passwordField.getText()));
 
         clearLoginBox();
     }
 
     public void onSendClick() {
-        final String userMessage = messageField.getText();
-
-        if (userMessage.isEmpty()) return;
-
-        client.sendMessage(userMessage);
+        final String message = messageField.getText().trim();
+        if (message.isEmpty()) {
+            return;
+        }
+        if (nickTo != null) {
+            client.sendMessage(PrivateMessage.of(nickTo, client.getNick(), message));
+            nickTo = null;
+        } else if (message.startsWith("/change")){
+            final String[] split = message.split("\\s");
+            final String newNick = split[1];
+            client.sendMessage(ChangeNickMessage.of(client.getNick(), newNick));
+        } else {
+            client.sendMessage(SimpleMessage.of(message, client.getNick()));
+        }
         clearMessageField();
     }
 
@@ -72,7 +86,6 @@ public class ClientController {
     public void setAuth(boolean success) {
         loginBox.setVisible(!success);
         messageBox.setVisible(success);
-        textArea.setVisible(success);
 
         if (!success) {
             Platform.exit();
@@ -101,5 +114,28 @@ public class ClientController {
     private void clearLoginBox () {
         loginField.clear();
         passwordField.clear();
+    }
+
+    public void showError(String error) {
+        final Alert alert = new Alert(Alert.AlertType.ERROR, error, new ButtonType("OK", ButtonBar.ButtonData.OK_DONE));
+        alert.setTitle("Ошибка!");
+        alert.showAndWait();
+    }
+
+    public void selectClient(MouseEvent mouseEvent) {
+        if (mouseEvent.getClickCount() == 2) {
+            final String nick = clientList.getSelectionModel().getSelectedItem();
+
+            if (nick != null) {
+                this.nickTo = nick;
+            }
+
+            clearMessageField();
+        }
+    }
+
+    public void updateClientList(Collection<String> clients) {
+        clientList.getItems().clear();
+        clientList.getItems().addAll(clients);
     }
 }

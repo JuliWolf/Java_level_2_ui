@@ -1,14 +1,16 @@
 package ui.level_2_ui.client;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import javafx.application.Platform;
+import ui.level_2_ui.message.*;
+
+import java.io.*;
 import java.net.Socket;
 
 public class ChatClient {
     private Socket socket;
-    private DataInputStream in;
-    private DataOutputStream out;
+    private ObjectInputStream in;
+    private ObjectOutputStream out;
+    private String nick;
 
     private ClientController controller;
 
@@ -18,16 +20,20 @@ public class ChatClient {
         this.controller = controller;
     }
 
+    public String getNick() {
+        return nick;
+    }
+
     public void openConnection () throws IOException {
         socket = new Socket("localhost", 8189);
-        in = new DataInputStream(socket.getInputStream());
-        out = new DataOutputStream(socket.getOutputStream());
+        out = new ObjectOutputStream(socket.getOutputStream());
+        in = new ObjectInputStream(socket.getInputStream());
 
         final Thread readThread = new Thread(() -> {
             try {
                 waitAuthenticate();
                 readMessage();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             } finally {
                 closeConnection();
@@ -38,52 +44,85 @@ public class ChatClient {
     }
 
     private void closeConnection() {
-        try {
-            socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (socket != null) {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
+        if (in != null) {
+            try {
+                in.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        if (out != null) {
+            try {
+                out.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        System.exit(0);
     }
 
-    private void readMessage() throws IOException {
+    private void readMessage() throws Exception {
         while (true) {
             if (isAuthExpired) break;
 
-            String message = in.readUTF();
+            final AbstractMessage message = (AbstractMessage) in.readObject();
             System.out.println("Receive message: " + message);
 
-            if ("/end".equals(message)) {
+            if (message.getCommand() == Command.END) {
                 controller.setAuth(false);
                 break;
             }
-            controller.addMessage(message);
+
+            if (message.getCommand() == Command.ERROR) {
+                final ErrorMessage errorMessage = (ErrorMessage) message;
+                Platform.runLater(() -> controller.showError(errorMessage.getError()));
+            } else if (message.getCommand() == Command.CLIENTS) {
+                final ClientListMessage clientListMessage = (ClientListMessage) message;
+                controller.updateClientList(clientListMessage.getClients());
+            } else if (message.getCommand() == Command.MESSAGE) {
+                final SimpleMessage simpleMessage = (SimpleMessage) message;
+                controller.addMessage(simpleMessage.getNickFrom() + ": " + simpleMessage.getMessage());
+            } else if (message.getCommand() == Command.CHANGE_NICK) {
+                this.nick = ((ChangeNickMessage) message).getNewNick();
+            }
         }
     }
 
-    private void waitAuthenticate() throws IOException {
+    private void waitAuthenticate() throws Exception {
         while (true) {
-            final String message = in.readUTF();
-            if (message.startsWith("/authok")) {
-                final String[] split = message.split("\\s");
-                final String nick = split[1];
+            final AbstractMessage message = (AbstractMessage) in.readObject();
+            if (message.getCommand() == Command.AUTHOK) {
+                this.nick = ((AuthOkMessage) message).getNick();
                 controller.addMessage("Успешная авторизация под ником " + nick);
                 controller.setAuth(true);
                 break;
             }
 
-            if ("/authTimeout".equals(message)) {
+            if (message.getCommand() == Command.ERROR) {
+                final ErrorMessage errorMessage = (ErrorMessage) message;
+                Platform.runLater(() -> controller.showError(errorMessage.getError()));
+            }
+
+            if (message.getCommand() == Command.AUTH_TIMEOUT) {
                 isAuthExpired = true;
                 controller.setAuth(false);
-                sendMessage("/authTimeout");
+                sendMessage(message);
                 break;
             }
         }
     }
 
-    public void sendMessage(String message) {
+    public void sendMessage(AbstractMessage message) {
         try {
             System.out.println("Send message: " + message);
-            out.writeUTF(message);
+            out.writeObject(message);
         } catch (IOException e) {
             e.printStackTrace();
         }

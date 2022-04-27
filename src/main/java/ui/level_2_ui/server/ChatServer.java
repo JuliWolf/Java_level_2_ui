@@ -1,10 +1,17 @@
 package ui.level_2_ui.server;
 
+import ui.level_2_ui.message.AbstractMessage;
+import ui.level_2_ui.message.ClientListMessage;
+import ui.level_2_ui.message.ErrorMessage;
+import ui.level_2_ui.message.SimpleMessage;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ChatServer {
     private final int PORT = 8189;
@@ -37,32 +44,42 @@ public class ChatServer {
         return clients.containsKey(nick);
     }
 
-    public synchronized void broadcast (String message) {
-        clients.values().forEach(client -> client.sendMessage(message));
+    public synchronized void broadcast (AbstractMessage message) {
+        for (ClientHandler client : clients.values()) {
+            client.sendMessage(message);
+        }
     }
 
-    public void sendPrivateMessage(String from, String to, String message) {
-        ClientHandler sender = clients.get(from);
-        ClientHandler receiver = clients.get(to);
-
-        if (receiver == null) {
-            sender.sendMessage("SERVER: user with nick " + to + " is not active");
-            return;
+    public void sendPrivateMessage(ClientHandler sender, String to, String message) {
+        final ClientHandler receiver = clients.get(to);
+        if (receiver != null) {
+            receiver.sendMessage(SimpleMessage.of("от " + sender.getNick() + ": " + message, sender.getNick()));
+            sender.sendMessage(SimpleMessage.of("участнику " + to + ": " + message, sender.getNick()));
+        } else {
+            sender.sendMessage(ErrorMessage.of("Участника с ником " + to + " нет в чате!"));
         }
-
-        receiver.sendMessage(message);
     }
 
     public synchronized void unsubscribe (ClientHandler client) {
         clients.remove(client.getNick());
+        broadcastClientList();
     }
 
     public synchronized void subscribe (ClientHandler client) {
         clients.put(client.getNick(), client);
+        broadcastClientList();
+    }
+
+    private void broadcastClientList() {
+        final List<String> nicks = clients.values().stream()
+                .map(ClientHandler::getNick)
+                .collect(Collectors.toList());
+        broadcast(ClientListMessage.of(nicks));
     }
 
     public void changeNick(String nick, String newNick) {
         dbConnection.changeNick(nick, newNick);
-        broadcast("User with nick: " + nick + " changed his nickname. New nick is " + newNick);
+        broadcastClientList();
+        broadcast(SimpleMessage.of( "Nick changed. New nick is " + newNick, nick));
     }
 }
