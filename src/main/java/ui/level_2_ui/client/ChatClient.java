@@ -91,6 +91,9 @@ public class ChatClient {
                 controller.addMessage(simpleMessage.getNickFrom() + ": " + simpleMessage.getMessage());
             } else if (message.getCommand() == Command.CHANGE_NICK) {
                 this.nick = ((ChangeNickMessage) message).getNewNick();
+            } else if (message.getCommand() == Command.LOG) {
+                final LogMessage logMessage = (LogMessage) message;
+                controller.setLogger(logMessage.getLog());
             }
         }
     }

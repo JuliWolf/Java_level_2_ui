@@ -23,6 +23,7 @@
 
     <HBox fx:id="messageBox" VBox.vgrow="ALWAYS" visible="false" >
         <VBox spacing="5">
+            <TextArea fx:id="loggerArea" VBox.vgrow="ALWAYS" editable="false"/>
             <TextArea fx:id="messagesArea" VBox.vgrow="ALWAYS" editable="false"/>
             <HBox>
                 <TextField fx:id="messageField" HBox.hgrow="ALWAYS"/>
