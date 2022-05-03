@@ -3,12 +3,12 @@ package ui.level_2_ui.server;
 import java.io.*;
 import org.apache.commons.io.input.*;
 
-public class Logger {
+public class MessageLogger {
     private final Integer LINES_COUNT = 100;
     private final File file;
     private final String fileName;
 
-    public Logger (String nick) {
+    public MessageLogger(String nick) {
         fileName = "history_" + nick;
         file = new File(fileName +".txt");
 
