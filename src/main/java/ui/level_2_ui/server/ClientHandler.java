@@ -4,6 +4,7 @@ import ui.level_2_ui.message.*;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.concurrent.*;
 
 public class ClientHandler {
     private Socket socket;
@@ -14,9 +15,12 @@ public class ClientHandler {
     AuthService authService;
 
     private String nick;
+
     private final int AUTH_TIMEOUT = 120;
     private Boolean isAuthExpired = false;
     private Boolean isAuthenticated = false;
+
+    private ExecutorService service;
 
     public String getNick () {
         return nick;
@@ -31,71 +35,72 @@ public class ClientHandler {
             this.out = new ObjectOutputStream(socket.getOutputStream());
             this.authService = authService;
 
-            new Thread(() -> {
-                try {
-                    Thread.sleep(AUTH_TIMEOUT * 1000);
+            this.service = Executors.newFixedThreadPool(2);
 
-                    if (!isAuthenticated) {
+            service.execute(() -> {
+                try {
+                    Future<?> future = service.submit(authentication());
+                    future.get(AUTH_TIMEOUT, TimeUnit.SECONDS);
+                } catch (ExecutionException | TimeoutException | InterruptedException e) {
+                    if (!this.isAuthenticated) {
+                        this.isAuthExpired = true;
                         sendMessage(AuthTimeoutMessage.of());
                     }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
                 }
-            }).start();
+            });
 
-            new Thread(() -> {
+            service.execute(() -> {
                 try {
-                    authentication();
                     readMessage();
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
                     closeConnection();
                 }
-            }).start();
-        } catch (IOException e) {
+            });
+
+            service.shutdown();
+        } catch (Exception e) {
             throw new RuntimeException("Проблемы при создании обработчика клиента");
         }
     }
 
-    private void authentication() throws Exception {
-        while (true) {
-            try {
-                final AbstractMessage message = (AbstractMessage) in.readObject();
-                if (message.getCommand() == Command.AUTH) {
-                    final AuthMessage authMessage = (AuthMessage) message;
-                    final String login = authMessage.getLogin();
-                    final String password = authMessage.getPassword();
-                    final String nick = authService.getNickByLoginPass(login, password);
-                    if (nick != null) {
-                        if (server.isNickBusy(nick)) {
-                            sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
-                            continue;
+    private Runnable authentication() {
+        return () -> {
+            while (true) {
+                try {
+                    final AbstractMessage message = (AbstractMessage) in.readObject();
+                    if (message.getCommand() == Command.AUTH) {
+                        final AuthMessage authMessage = (AuthMessage) message;
+                        final String login = authMessage.getLogin();
+                        final String password = authMessage.getPassword();
+                        final String nick = authService.getNickByLoginPass(login, password);
+                        if (nick != null) {
+                            if (server.isNickBusy(nick)) {
+                                sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
+                                continue;
+                            }
+
+                            sendMessage(AuthOkMessage.of(nick));
+
+                            initLogger(login);
+
+                            this.nick = nick;
+                            this.isAuthenticated = true;
+
+                            server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
+                            server.subscribe(this);
+                            break;
+                        } else {
+                            sendMessage(ErrorMessage.of("Неверные логин и пароль"));
                         }
-
-                        sendMessage(AuthOkMessage.of(nick));
-
-                        initLogger(login);
-
-                        this.nick = nick;
-                        this.isAuthenticated = true;
-
-                        server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
-                        server.subscribe(this);
-                        break;
-                    } else {
-                        sendMessage(ErrorMessage.of("Неверные логин и пароль"));
                     }
-                }
 
-                if (message.getCommand() == Command.AUTH_TIMEOUT) {
-                    isAuthExpired = true;
-                    break;
+                } catch (IOException | ClassNotFoundException e) {
+                    e.printStackTrace();
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
-        }
+        };
     }
 
     public void sendMessage(AbstractMessage message) {
@@ -173,5 +178,7 @@ public class ClientHandler {
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        service.shutdown();
     }
 }
