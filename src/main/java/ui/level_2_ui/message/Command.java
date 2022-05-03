@@ -2,6 +2,7 @@ package ui.level_2_ui.message;
 
 public enum Command {
     END,
+    LOG,
     AUTH,
     ERROR,
     AUTHOK,

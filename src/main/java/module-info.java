@@ -2,6 +2,7 @@ module ui.level_2_ui {
     requires javafx.controls;
     requires javafx.fxml;
     requires java.sql;
+    requires commons.io;
 
     opens ui.level_2_ui.client to javafx.fxml;
     exports ui.level_2_ui.client;

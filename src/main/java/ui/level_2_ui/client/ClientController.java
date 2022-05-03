@@ -23,6 +23,9 @@ public class ClientController {
     private String nickTo;
 
     @FXML
+    public TextArea loggerArea;
+
+    @FXML
     private ListView<String> clientList;
 
     @FXML
@@ -137,5 +140,9 @@ public class ClientController {
     public void updateClientList(Collection<String> clients) {
         clientList.getItems().clear();
         clientList.getItems().addAll(clients);
+    }
+
+    public void setLogger (String log) {
+        loggerArea.appendText(log);
     }
 }

@@ -1,7 +1,6 @@
 package ui.level_2_ui.server;
 
 import ui.level_2_ui.message.*;
-import ui.level_2_ui.server.ChatServer;
 
 import java.io.*;
 import java.net.Socket;
@@ -11,6 +10,7 @@ public class ClientHandler {
     private ChatServer server;
     private ObjectInputStream in;
     private ObjectOutputStream out;
+    private MessageLogger messageLogger;
     AuthService authService;
 
     private String nick;
@@ -72,9 +72,14 @@ public class ClientHandler {
                             sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
                             continue;
                         }
+
                         sendMessage(AuthOkMessage.of(nick));
+
+                        initLogger(login);
+
                         this.nick = nick;
                         this.isAuthenticated = true;
+
                         server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
                         server.subscribe(this);
                         break;
@@ -95,11 +100,16 @@ public class ClientHandler {
 
     public void sendMessage(AbstractMessage message) {
         try {
-            System.out.println("SERVER: Send message to " + nick);
+            System.out.println("SERVER: Send message type " + message.getCommand());
             out.writeObject(message);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void initLogger (String login) {
+        this.messageLogger = new MessageLogger(login);
+        sendMessage(LogMessage.of(messageLogger.read()));
     }
 
     private void readMessage() throws Exception {
@@ -117,11 +127,13 @@ public class ClientHandler {
                 if (message.getCommand() == Command.MESSAGE) {
                     final SimpleMessage simpleMessage = (SimpleMessage) message;
                     server.broadcast(simpleMessage);
+                    messageLogger.write("message: " + simpleMessage.getMessage());
                 }
 
                 if (message.getCommand() == Command.PRIVATE_MESSAGE) {
                     final PrivateMessage privateMessage = (PrivateMessage) message;
                     server.sendPrivateMessage(this, privateMessage.getNickTo(), privateMessage.getMessage());
+                    messageLogger.write("private message to " + privateMessage.getNickTo() + ": " + privateMessage.getMessage());
                 }
 
                 if (message.getCommand() == Command.CHANGE_NICK) {
