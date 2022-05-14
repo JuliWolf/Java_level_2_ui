@@ -11,6 +11,8 @@ import java.net.Socket;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class ChatServer {
@@ -25,6 +27,7 @@ public class ChatServer {
     }
 
     public void run () {
+        final ExecutorService executorService = Executors.newCachedThreadPool();
         try (
             ServerSocket server = new ServerSocket(PORT);
             AuthService authService = new AuthServiceImpl(dbConnection)
@@ -32,11 +35,13 @@ public class ChatServer {
             while (true) {
                 System.out.println("Wait client connection...");
                 Socket socket = server.accept();
-                new ClientHandler(socket, this, authService);
+                new ClientHandler(socket, this, authService, executorService);
                 System.out.println("Client connected");
             }
         } catch (IOException e) {
             System.out.println("Ошибка в работе сервера");
+        } finally {
+            executorService.shutdownNow();
         }
     }
 

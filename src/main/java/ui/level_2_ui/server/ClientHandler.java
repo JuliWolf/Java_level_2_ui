@@ -17,8 +17,7 @@ public class ClientHandler {
     private String nick;
 
     private final int AUTH_TIMEOUT = 120;
-    private Boolean isAuthExpired = false;
-    private Boolean isAuthenticated = false;
+    private final Future<Void> timeoutFuture;
 
     private ExecutorService service;
 
@@ -26,7 +25,12 @@ public class ClientHandler {
         return nick;
     }
 
-    public ClientHandler(Socket socket, ChatServer server, AuthService authService) {
+    public ClientHandler(
+            Socket socket,
+            ChatServer server,
+            AuthService authService,
+            ExecutorService executorService
+    ) {
         try {
             this.nick = "";
             this.socket = socket;
@@ -35,72 +39,64 @@ public class ClientHandler {
             this.out = new ObjectOutputStream(socket.getOutputStream());
             this.authService = authService;
 
-            this.service = Executors.newFixedThreadPool(2);
-
-            service.execute(() -> {
+            executorService.submit(() -> {
                 try {
-                    Future<?> future = service.submit(authentication());
-                    future.get(AUTH_TIMEOUT, TimeUnit.SECONDS);
-                } catch (ExecutionException | TimeoutException | InterruptedException e) {
-                    if (!this.isAuthenticated) {
-                        this.isAuthExpired = true;
-                        sendMessage(AuthTimeoutMessage.of());
-                    }
-                }
-            });
-
-            service.execute(() -> {
-                try {
+                    authentication();
                     readMessage();
-                } catch (Exception e) {
-                    e.printStackTrace();
                 } finally {
                     closeConnection();
                 }
             });
 
-            service.shutdown();
+            timeoutFuture = executorService.submit(() -> {
+                try {
+                    Thread.sleep(AUTH_TIMEOUT);
+                    System.out.println("Time is over, stop client");
+                    closeConnection();
+                } catch (InterruptedException e) {
+                    // do nothing
+                }
+                return null;
+            });
         } catch (Exception e) {
             throw new RuntimeException("Проблемы при создании обработчика клиента");
         }
     }
 
-    private Runnable authentication() {
-        return () -> {
-            while (true) {
-                try {
-                    final AbstractMessage message = (AbstractMessage) in.readObject();
-                    if (message.getCommand() == Command.AUTH) {
-                        final AuthMessage authMessage = (AuthMessage) message;
-                        final String login = authMessage.getLogin();
-                        final String password = authMessage.getPassword();
-                        final String nick = authService.getNickByLoginPass(login, password);
-                        if (nick != null) {
-                            if (server.isNickBusy(nick)) {
-                                sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
-                                continue;
-                            }
-
-                            sendMessage(AuthOkMessage.of(nick));
-
-                            initLogger(login);
-
-                            this.nick = nick;
-                            this.isAuthenticated = true;
-
-                            server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
-                            server.subscribe(this);
-                            break;
-                        } else {
-                            sendMessage(ErrorMessage.of("Неверные логин и пароль"));
+    private void authentication() {
+        while (true) {
+            try {
+                final AbstractMessage message = (AbstractMessage) in.readObject();
+                if (message.getCommand() == Command.AUTH) {
+                    final AuthMessage authMessage = (AuthMessage) message;
+                    final String login = authMessage.getLogin();
+                    final String password = authMessage.getPassword();
+                    final String nick = authService.getNickByLoginPass(login, password);
+                    if (nick != null) {
+                        if (server.isNickBusy(nick)) {
+                            sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
+                            continue;
                         }
-                    }
 
-                } catch (IOException | ClassNotFoundException e) {
-                    e.printStackTrace();
+                        this.timeoutFuture.cancel(true);
+                        sendMessage(AuthOkMessage.of(nick));
+
+                        initLogger(login);
+
+                        this.nick = nick;
+
+                        server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
+                        server.subscribe(this);
+                        break;
+                    } else {
+                        sendMessage(ErrorMessage.of("Неверные логин и пароль"));
+                    }
                 }
+
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
             }
-        };
+        }
     }
 
     public void sendMessage(AbstractMessage message) {
@@ -117,11 +113,9 @@ public class ClientHandler {
         sendMessage(LogMessage.of(messageLogger.read()));
     }
 
-    private void readMessage() throws Exception {
+    private void readMessage() {
         try {
             while (true) {
-                if (isAuthExpired) break;
-
                 final AbstractMessage message = (AbstractMessage) in.readObject();
                 System.out.println("Receive message: " + message);
 
@@ -149,7 +143,7 @@ public class ClientHandler {
                     nick = newNick;
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
