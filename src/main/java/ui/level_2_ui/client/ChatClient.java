@@ -5,8 +5,6 @@ import ui.level_2_ui.message.*;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class ChatClient {
     private Socket socket;
@@ -16,19 +14,10 @@ public class ChatClient {
 
     private ClientController controller;
 
-    private ExecutorService service;
-
     private boolean isAuthExpired = false;
 
     public ChatClient (ClientController controller) {
         this.controller = controller;
-        this.service = Executors.newFixedThreadPool(1,
-            r -> {
-                Thread t = Executors.defaultThreadFactory().newThread(r);
-                t.setDaemon(true);
-                return t;
-            }
-        );
     }
 
     public String getNick() {
@@ -40,7 +29,7 @@ public class ChatClient {
         out = new ObjectOutputStream(socket.getOutputStream());
         in = new ObjectInputStream(socket.getInputStream());
 
-        service.execute(() -> {
+        final Thread readThread = new Thread(() -> {
             try {
                 waitAuthenticate();
                 readMessage();
@@ -50,6 +39,9 @@ public class ChatClient {
                 closeConnection();
             }
         });
+
+        readThread.setDaemon(true);
+        readThread.start();
     }
 
     private void closeConnection() {
@@ -74,7 +66,6 @@ public class ChatClient {
                 e.printStackTrace();
             }
         }
-        service.shutdown();
         System.exit(0);
     }
 
