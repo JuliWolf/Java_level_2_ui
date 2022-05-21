@@ -21,6 +21,8 @@ public class ClientHandler {
 
     private final ServerLogger logger;
 
+    private final ServerLogger logger;
+
     public String getNick () {
         return nick;
     }
