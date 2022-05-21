@@ -17,9 +17,7 @@ public class ClientHandler {
     private String nick;
 
     private final int AUTH_TIMEOUT = 120;
-    private final Future<Void> timeoutFuture;
-
-    private ExecutorService service;
+    private Future<?> timeoutFuture;
 
     public String getNick () {
         return nick;
@@ -39,64 +37,65 @@ public class ClientHandler {
             this.out = new ObjectOutputStream(socket.getOutputStream());
             this.authService = authService;
 
-            executorService.submit(() -> {
+            executorService.execute(() -> {
                 try {
-                    authentication();
+                    timeoutFuture = executorService.submit(authentication());
+                    timeoutFuture.get(AUTH_TIMEOUT, TimeUnit.SECONDS);
+                } catch (ExecutionException e) {
+                    throw new RuntimeException(e);
+                } catch (InterruptedException | TimeoutException e) {
+                    sendMessage(AuthTimeoutMessage.of());
+                }
+            });
+
+            executorService.execute(() -> {
+                try {
                     readMessage();
                 } finally {
                     closeConnection();
                 }
-            });
-
-            timeoutFuture = executorService.submit(() -> {
-                try {
-                    Thread.sleep(AUTH_TIMEOUT);
-                    System.out.println("Time is over, stop client");
-                    closeConnection();
-                } catch (InterruptedException e) {
-                    // do nothing
-                }
-                return null;
             });
         } catch (Exception e) {
             throw new RuntimeException("Проблемы при создании обработчика клиента");
         }
     }
 
-    private void authentication() {
-        while (true) {
-            try {
-                final AbstractMessage message = (AbstractMessage) in.readObject();
-                if (message.getCommand() == Command.AUTH) {
-                    final AuthMessage authMessage = (AuthMessage) message;
-                    final String login = authMessage.getLogin();
-                    final String password = authMessage.getPassword();
-                    final String nick = authService.getNickByLoginPass(login, password);
-                    if (nick != null) {
-                        if (server.isNickBusy(nick)) {
-                            sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
-                            continue;
+    private Runnable authentication() {
+        return () -> {
+            while (true) {
+                try {
+                    final AbstractMessage message = (AbstractMessage) in.readObject();
+                    if (message.getCommand() == Command.AUTH) {
+                        final AuthMessage authMessage = (AuthMessage) message;
+                        final String login = authMessage.getLogin();
+                        final String password = authMessage.getPassword();
+                        final String nick = authService.getNickByLoginPass(login, password);
+                        if (nick != null) {
+                            if (server.isNickBusy(nick)) {
+                                sendMessage(ErrorMessage.of("Пользователь уже авторизован"));
+                                continue;
+                            }
+
+                            this.timeoutFuture.cancel(true);
+                            sendMessage(AuthOkMessage.of(nick));
+
+                            initLogger(login);
+
+                            this.nick = nick;
+
+                            server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
+                            server.subscribe(this);
+                            break;
+                        } else {
+                            sendMessage(ErrorMessage.of("Неверные логин и пароль"));
                         }
-
-                        this.timeoutFuture.cancel(true);
-                        sendMessage(AuthOkMessage.of(nick));
-
-                        initLogger(login);
-
-                        this.nick = nick;
-
-                        server.broadcast(SimpleMessage.of(nick, "Пользователь " + nick + " зашел в чат"));
-                        server.subscribe(this);
-                        break;
-                    } else {
-                        sendMessage(ErrorMessage.of("Неверные логин и пароль"));
                     }
-                }
 
-            } catch (IOException | ClassNotFoundException e) {
-                e.printStackTrace();
+                } catch (IOException | ClassNotFoundException e) {
+                    e.printStackTrace();
+                }
             }
-        }
+        };
     }
 
     public void sendMessage(AbstractMessage message) {
@@ -117,7 +116,10 @@ public class ClientHandler {
         try {
             while (true) {
                 final AbstractMessage message = (AbstractMessage) in.readObject();
-                System.out.println("Receive message: " + message);
+
+                if (message.getCommand() == Command.AUTH_TIMEOUT) {
+                    break;
+                }
 
                 if (message.getCommand() == Command.END) {
                     break;
@@ -172,7 +174,5 @@ public class ClientHandler {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        service.shutdown();
     }
 }

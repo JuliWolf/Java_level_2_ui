@@ -48,13 +48,10 @@ public class ClientController {
 
     public ClientController () {
         this.client = new ChatClient(this);
-        while (true) {
-            try {
-                client.openConnection();
-                break;
-            } catch (Exception e) {
-                showNotification();
-            }
+        try {
+            client.openConnection();
+        } catch (Exception e) {
+            showNotification();
         }
     }
 

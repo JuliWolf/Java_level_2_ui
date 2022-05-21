@@ -27,7 +27,7 @@ public class ChatServer {
     }
 
     public void run () {
-        final ExecutorService executorService = Executors.newCachedThreadPool();
+        final ExecutorService executorService = Executors.newFixedThreadPool(2);
         try (
             ServerSocket server = new ServerSocket(PORT);
             AuthService authService = new AuthServiceImpl(dbConnection)
