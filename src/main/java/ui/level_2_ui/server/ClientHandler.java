@@ -19,6 +19,8 @@ public class ClientHandler {
     private final int AUTH_TIMEOUT = 120;
     private Future<?> timeoutFuture;
 
+    private final ServerLogger logger;
+
     public String getNick () {
         return nick;
     }
@@ -27,7 +29,8 @@ public class ClientHandler {
             Socket socket,
             ChatServer server,
             AuthService authService,
-            ExecutorService executorService
+            ExecutorService executorService,
+            ServerLogger logger
     ) {
         try {
             this.nick = "";
@@ -36,6 +39,7 @@ public class ClientHandler {
             this.in = new ObjectInputStream(socket.getInputStream());
             this.out = new ObjectOutputStream(socket.getOutputStream());
             this.authService = authService;
+            this.logger = logger;
 
             executorService.execute(() -> {
                 try {
@@ -56,6 +60,7 @@ public class ClientHandler {
                 }
             });
         } catch (Exception e) {
+            logger.fatal("Проблемы при создании обработчика клиента");
             throw new RuntimeException("Проблемы при создании обработчика клиента");
         }
     }
@@ -100,7 +105,7 @@ public class ClientHandler {
 
     public void sendMessage(AbstractMessage message) {
         try {
-            System.out.println("SERVER: Send message type " + message.getCommand());
+            logger.info("SERVER: Send message type " + message.getCommand());
             out.writeObject(message);
         } catch (IOException e) {
             e.printStackTrace();
@@ -116,6 +121,7 @@ public class ClientHandler {
         try {
             while (true) {
                 final AbstractMessage message = (AbstractMessage) in.readObject();
+                logger.info("Receive message: " + message);
 
                 if (message.getCommand() == Command.AUTH_TIMEOUT) {
                     break;

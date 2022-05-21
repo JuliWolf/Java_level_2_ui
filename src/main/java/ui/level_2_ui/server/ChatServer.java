@@ -21,9 +21,12 @@ public class ChatServer {
     private final Map<String, ClientHandler> clients;
     private final DataBaseConnect dbConnection;
 
+    private final ServerLogger logger;
+
     public ChatServer() {
-        this.dbConnection = new DataBaseConnect();
+        this.logger = new ServerLogger();
         this.clients = new HashMap<>();
+        this.dbConnection = new DataBaseConnect();
     }
 
     public void run () {
@@ -33,13 +36,13 @@ public class ChatServer {
             AuthService authService = new AuthServiceImpl(dbConnection)
         ) {
             while (true) {
-                System.out.println("Wait client connection...");
+                logger.info("Wait client connection...");
                 Socket socket = server.accept();
-                new ClientHandler(socket, this, authService, executorService);
-                System.out.println("Client connected");
+                new ClientHandler(socket, this, authService, executorService, logger);
+                logger.info("Client connected");
             }
         } catch (IOException e) {
-            System.out.println("Ошибка в работе сервера");
+            logger.error("Ошибка в работе сервера");
         } finally {
             executorService.shutdownNow();
         }
@@ -52,6 +55,7 @@ public class ChatServer {
     public synchronized void broadcast (AbstractMessage message) {
         for (ClientHandler client : clients.values()) {
             client.sendMessage(message);
+            logger.info(message);
         }
     }
 
@@ -68,11 +72,13 @@ public class ChatServer {
     public synchronized void unsubscribe (ClientHandler client) {
         clients.remove(client.getNick());
         broadcastClientList();
+        logger.debug("Client with nick: " + client.getNick() + " was unsubscribed");
     }
 
     public synchronized void subscribe (ClientHandler client) {
         clients.put(client.getNick(), client);
         broadcastClientList();
+        logger.debug("Client with nick: " + client.getNick() + " was subscribed");
     }
 
     private void broadcastClientList() {
